@@ -1,0 +1,142 @@
+curl https://s3.amazonaws.com/aws-cli/awscli-bundle.zip -o awscli-bundle.zip
+
+
+apt install unzip python-is-python3
+
+unzip awscli-bundle.zip
+./awscli-bundle/install -i /usr/local/aws -b /usr/local/bin/aws
+
+Install kubectl on ubuntu instance
+-----------------------------------
+
+curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl
+ chmod +x ./kubectl
+ sudo mv ./kubectl /usr/local/bin/kubectl
+
+Install kops on ubuntu instance
+---------------------------------
+ curl -LO  https://github.com/kubernetes/kops/releases/download/1.15.0/kops-linux-amd64
+ chmod +x kops-linux-amd64
+ sudo mv kops-linux-amd64 /usr/local/bin/kops
+ kops version (it should be 1.15.0)
+ Note: use below command if you wish to use latest version. For now we could see latest version of kops. So ignore it until further update. 
+ # curl -LO https://github.com/kubernetes/kops/releases/download/$(curl -s https://api.github.com/repos/kubernetes/kops/releases/latest | grep tag_name | cut -d '"' -f 4)/kops-linux-amd64
+
+
+Create an IAM user/role with Route53, EC2, IAM and S3 full access
+
+
+k8s
+access keyid : AKIA5TGIZIMMYPVTYSZK
+secret access key: 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
+
+role 
+arn:aws:iam::934576472857:role/k8sRole
+
+Attach IAM role to ubuntu instance
+
+# Note: If you create IAM user with programmatic access then provide Access keys. Otherwise region information is enough
+aws configure
+
+apt-get update
+apt-get install python3-virtualenv
+
+sudo apt-get install python3-venv
+./awscli-bundle/install -i /usr/local/aws -b /usr/local/bin/aws
+
+aws configure
+
+Create a Route53 private hosted zone (you can create Public hosted zone if you have a domain)
+
+Routeh53 --> hosted zones --> created hosted zone  
+Domain Name: valaxy.net
+Type: Private hosted zone for Amazon VPC. Make sure you are chosing right VPC if you have multiple
+
+create an S3 bucket
+ aws s3 mb s3://demo.k8s.awstutorial.xyz
+
+Expose environment variable:
+
+ export KOPS_STATE_STORE=s3://demo.k8s.awstutorial.xyz
+
+Create sshkeys before creating cluster
+
+ ssh-keygen
+
+Create kubernetes cluster definitions on S3 bucket
+kops create cluster --cloud=aws --zones=ap-south-1b --name=demo.k8s.awstutorial.xyz --dns-zone=Z0603072CRT9R9OLOBN8 --dns private 
+
+kops create cluster --cloud=aws --zones=ap-south-1b --name=demok8s.awstutorial.xyz --dns-zone=awstutorial.xyz --dns public
+
+kops create cluster --zones=ap-south-1b demok8s.awstutorial.xyz --dns-zone=awstutorial.xyz --dns private
+
+replace --dns-zone with zone id if it doesnt work with hosted zone name awstutorial.xyz
+
+Suggestions:
+ * list clusters with: kops get cluster
+ * edit this cluster with: kops edit cluster demo.k8s.awstutorial.xyz
+ * edit your node instance group: kops edit ig --name=demo.k8s.awstutorial.xyz nodes
+ * edit your master instance group: kops edit ig --name=demo.k8s.awstutorial.xyz master-ap-south-1b
+
+Finally configure your cluster with: kops update cluster --name demo.k8s.awstutorial.xyz --yes
+
+Create kubernetes cluser
+kops update cluster demo.k8s.awstutorial.xyz --yes
+
+
+To cahnge the kubernetes master and worker instance sizes
+
+kops edit ig --name=demo.k8s.awstutorial.xyz nodes
+#kops edit ig --name=demo.k8s.valaxy.net nodes 
+kops edit ig --name=demo.k8s.awstutorial.xyz master-ap-south-1b
+#kops edit ig --name=demo.k8s.valaxy.net master-ap-south-1b
+
+Suggestions:
+ * validate cluster: kops validate cluster
+ * list nodes: kubectl get nodes --show-labels
+ * ssh to the master: ssh -i ~/.ssh/id_rsa admin@api.demok8s.awstutorial.xyz
+ * the admin user is specific to Debian. If not using Debian please use the appropriate user based on your OS.
+ * read about installing addons at: https://github.com/kubernetes/kops/blob/master/docs/addons.md.
+
+
+Integrating ansible with kubernetes
+----------------------------------------
+sudo su -ansadmin
+
+cd .ssh
+cat id_rsa.pub
+add the key to authoriszed file on master server
+
+ssh -i ~/ssh/id_rsa root@masternodeip
+exit
+
+create hosts file 
+cd /opt/
+mkdir kubernetes
+cd kubernetes
+
+vi hosts
+[ansibleserver]
+localhost
+
+[kubernetes]
+65.2.63.81
+
+ssh -i ~/ssh/id_rsa root@65.2.63.81
+create deployment and service yaml file
+
+
+ansible-playbook -i /opt/kubernetes/hosts /opt/kubernetes/kubernetes-valaxy-deployment.yml --check
+ansible-playbook -i /opt/kubernetes/hosts /opt/kubernetes/kubernetes-valaxy-service.yml --check
+
+ansible-playbook -i /opt/kubernetes/hosts /opt/kubernetes/kubernetes-valaxy-service.yml;
+ansible-playbook -i /opt/kubernetes/hosts /opt/kubernetes/kubernetes-valaxy-deployment.yml
+
+kops delete cluster demo.k8s.awstutorial.xyz --yes
+
+
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
